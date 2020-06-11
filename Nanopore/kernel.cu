@@ -9,7 +9,7 @@
 #include<list>
 //code from https://stackoverflow.com/questions/735126/are-there-alternate-implementations-of-gnu-getline-interface/735472#735472
 
-#define K 5
+#define K 20
 
 typedef intptr_t ssize_t;
 typedef std::bitset<4> BYTE;
@@ -21,24 +21,24 @@ typedef struct K_MER_NODE
 
 } K_MER_NODE;
 
-ssize_t getline(char** lineptr, size_t* n, FILE* stream) {
+size_t getline(char** lineptr, size_t* n, FILE* stream) {
     size_t pos;
     int c;
 
     if (lineptr == NULL || stream == NULL || n == NULL) {
         errno = EINVAL;
-        return -1;
+        return 0;
     }
 
     c = getc(stream);
     if (c == EOF) {
-        return -1;
+        return 0;
     }
 
     if (*lineptr == NULL) {
         *lineptr = (char*)malloc(128);
         if (*lineptr == NULL) {
-            return -1;
+            return 0;
         }
         *n = 128;
     }
@@ -96,12 +96,13 @@ int main()
     size_t bufSize = 10;
     FILE* f;
     size_t line_size;
-    f = fopen("G:/chr2.fastq", "r"); 
+    f = fopen("G:/chr100mb.fastq", "r"); 
 
     int i = 0;
     do
     {
         i++;
+        line_size = 0;
         line_size = getline(&buf, &bufSize, f);
         if (i % 4 == 2) // Set A, C, T, G as BYTE
         {
