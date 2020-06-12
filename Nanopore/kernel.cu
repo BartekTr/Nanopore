@@ -7,6 +7,11 @@
 
 #include<bitset>
 #include<list>
+#include<map>
+
+#include <thrust/reduce.h>
+#include <thrust/execution_policy.h>
+#include <thrust/iterator/constant_iterator.h>
 //code from https://stackoverflow.com/questions/735126/are-there-alternate-implementations-of-gnu-getline-interface/735472#735472
 
 #define K 20
@@ -17,7 +22,8 @@ typedef std::bitset<4> BYTE;
 typedef struct K_MER_NODE
 {
     BYTE K_MER[K];
-    short K_MER_QUALITY;
+    //short K_MER_QUALITY;
+    //int key;
 
 } K_MER_NODE;
 
@@ -52,7 +58,7 @@ size_t getline(char** lineptr, size_t* n, FILE* stream) {
             }
             char* new_ptr = (char*)realloc(*lineptr, new_size);
             if (new_ptr == NULL) {
-                return -1;
+                return 0;
             }
             *n = new_size;
             *lineptr = new_ptr;
@@ -89,6 +95,7 @@ BYTE char_to_byte(char c)
 int main()
 {
     std::list<K_MER_NODE> K_MER_NODE_LIST = {};
+    //std::map<K_MER_NODE, int> 
 
     char* buf = NULL;  
     char* genotype = NULL;
@@ -132,21 +139,36 @@ int main()
                     prob += (int)probability[x + k_len];
                 }
 
-                k_mer.K_MER_QUALITY = prob / length;
-                K_MER_NODE_LIST.push_back(k_mer);
-                //printf("%c\n", genotype[x]);
-                //printf("%c\n", probability[x]);
-                //printf("\n");
-                //char char_to_byte
-                
+                K_MER_NODE_LIST.push_back(k_mer);               
             }
             printf("K_MER");
         }
-
-        //printf("4 lines!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-            //if (i == 4)
-              //  break;
     } while (line_size > 0);
+
+    std::list<K_MER_NODE>::iterator it = K_MER_NODE_LIST.begin();
+
+    /*for (int i = 0; i < allElements; i++)
+    {
+
+
+        std::advance(it, 1);
+    }*/
+
+    int allElements = K_MER_NODE_LIST.size();
+    int hashTableLength = 10;
+    int* id_of_all_kmers_CPU = (int*)malloc(sizeof(int) * allElements);
+
+
+    int* id_of_all_kmers_GPU;
+    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(int) * allElements);
+    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(int) * allElements, cudaMemcpyHostToDevice);
+
+    int* id_of_kmer;
+    int* amount_of_kmer;
+    cudaMalloc((void**)&id_of_kmer, sizeof(int) * hashTableLength);
+    cudaMalloc((void**)&amount_of_kmer, sizeof(int) * hashTableLength);
+    thrust::pair<int*, int*> new_end;
+    new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, thrust::make_constant_iterator(1), id_of_kmer, amount_of_kmer);
 
 
     if (f != NULL) {
