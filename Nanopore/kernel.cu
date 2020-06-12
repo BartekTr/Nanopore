@@ -5,13 +5,16 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include<bitset>
-#include<list>
-#include<map>
+#include <bitset>
+#include <list>
+#include <map>
+#include <set>
 
+#include <thrust/sort.h>
 #include <thrust/reduce.h>
 #include <thrust/execution_policy.h>
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/unique.h>
 //code from https://stackoverflow.com/questions/735126/are-there-alternate-implementations-of-gnu-getline-interface/735472#735472
 
 #define K 20
@@ -98,7 +101,6 @@ int main()
 
     char* buf = NULL;  
     char* genotype = NULL;
-    char* probability = NULL;
     size_t bufSize = 10;
     FILE* f;
     size_t line_size;
@@ -116,59 +118,75 @@ int main()
             if (genotype != NULL)
             {
                 free(genotype);
+                genotype = NULL;
             }
             genotype = (char*)malloc(length * sizeof(char));
             memcpy(genotype, buf, length);
         }
-        else if (i % 4 == 0) // Set probability
-        {
-            probability = buf;
-        }
 
-        if (i % 4 == 0)
+        if (i % 4 == 0) // Set probability
         {
             int length = strlen(genotype);
             for (int x = 0; x < length - K; x++)
             {
                 K_MER_NODE k_mer;
+                k_mer.value = 0;
+                k_mer.K_MER_QUALITY = 0;
                 long prob = 0;
                 for (int k_len = 0; k_len < K; k_len++)
                 {
-                    k_mer.value += get_value(genotype[x + k_len]) * (int)pow(4, K - k_len - 1);
-                    prob += (int)probability[x + k_len];
+                    k_mer.value += get_value(genotype[x + k_len]) * pow(4, K - k_len - 1);
+                    prob += (int)buf[x + k_len];
                 }
 
+                k_mer.K_MER_QUALITY = prob / K;
                 K_MER_NODE_LIST.push_back(k_mer);               
             }
             printf("K_MER");
         }
+
+        //free(buf);
+
     } while (line_size > 0);
 
     std::list<K_MER_NODE>::iterator it = K_MER_NODE_LIST.begin();
-
-    /*for (int i = 0; i < allElements; i++)
-    {
-
-
-        std::advance(it, 1);
-    }*/
-
+    std::set<long long> setOf_K_Mers;
     int allElements = K_MER_NODE_LIST.size();
-    int hashTableLength = 10;
-    int* id_of_all_kmers_CPU = (int*)malloc(sizeof(int) * allElements);
+    long long* id_of_all_kmers_CPU = (long long*)malloc(sizeof(long long) * allElements);
+    int hashTableLength = 0;
+    for (int i = 0; i < allElements; i++)
+    {
+        long long val = (*it).value;
+        if (setOf_K_Mers.find(val) == setOf_K_Mers.end()) // TODO: do it with thrust
+        {
+            hashTableLength++;
+            setOf_K_Mers.insert(val);
+        }
+
+        id_of_all_kmers_CPU[i] = val;
+        std::advance(it, 1);
+    }
+    setOf_K_Mers.clear();
+    K_MER_NODE_LIST.clear();
+
+    long long* id_of_all_kmers_GPU;
+    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * allElements);
+    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * allElements, cudaMemcpyHostToDevice);
+    thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
+    //int* new_end = thrust::unique(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
+    free(id_of_all_kmers_CPU);
+
+    long long* id_of_kmer_GPU;
+    int* amount_of_kmer_GPU;
+    cudaMalloc((void**)&id_of_kmer_GPU, sizeof(long long) * hashTableLength);
+    cudaMalloc((void**)&amount_of_kmer_GPU, sizeof(int) * hashTableLength);
+    thrust::pair<long long*, int*> new_end;
+    new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
 
 
-    int* id_of_all_kmers_GPU;
-    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(int) * allElements);
-    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(int) * allElements, cudaMemcpyHostToDevice);
-
-    int* id_of_kmer;
-    int* amount_of_kmer;
-    cudaMalloc((void**)&id_of_kmer, sizeof(int) * hashTableLength);
-    cudaMalloc((void**)&amount_of_kmer, sizeof(int) * hashTableLength);
-    thrust::pair<int*, int*> new_end;
-    new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, thrust::make_constant_iterator(1), id_of_kmer, amount_of_kmer);
-
+    cudaFree(id_of_all_kmers_GPU);
+    cudaFree(id_of_kmer_GPU);
+    cudaFree(amount_of_kmer_GPU);
 
     if (f != NULL) {
         printf("KK");
