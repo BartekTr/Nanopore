@@ -21,9 +21,8 @@ typedef std::bitset<4> BYTE;
 
 typedef struct K_MER_NODE
 {
-    BYTE K_MER[K];
-    //short K_MER_QUALITY;
-    //int key;
+    long long value;
+    short K_MER_QUALITY;
 
 } K_MER_NODE;
 
@@ -75,21 +74,21 @@ size_t getline(char** lineptr, size_t* n, FILE* stream) {
     return pos;
 }
 
-BYTE char_to_byte(char c)
+long long get_value(char c)
 {
-    BYTE byte;
+    long long value;
     if (c == 'A')
-        byte = 8;
+        value = 0;
     else if (c == 'C')
-        byte = 4;
+        value = 1;
     else if (c == 'T')
-        byte = 2;
+        value = 2;
     else if (c == 'G')
-        byte = 1;
+        value = 3;
     else
-        byte = 0;
+        value = 0;
 
-    return byte;
+    return value;
 }
 
 int main()
@@ -135,7 +134,7 @@ int main()
                 long prob = 0;
                 for (int k_len = 0; k_len < K; k_len++)
                 {
-                    k_mer.K_MER[k_len] = char_to_byte(genotype[x + k_len]);
+                    k_mer.value += get_value(genotype[x + k_len]) * (int)pow(4, K - k_len - 1);
                     prob += (int)probability[x + k_len];
                 }
 
