@@ -15,9 +15,11 @@
 #include <thrust/execution_policy.h>
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/unique.h>
+#include <thrust/device_vector.h>
+
 //code from https://stackoverflow.com/questions/735126/are-there-alternate-implementations-of-gnu-getline-interface/735472#735472
 
-#define K 20
+#define K 5
 
 typedef intptr_t ssize_t;
 typedef std::bitset<4> BYTE;
@@ -28,6 +30,36 @@ typedef struct K_MER_NODE
     short K_MER_QUALITY;
 
 } K_MER_NODE;
+
+
+void print_in_4(long long value, int k)
+{
+    for (int i = k-1; i >= 0; --i)
+        printf("%lld", (value >> (2 * i)) % 4);
+    printf("\n");
+}
+
+struct last_mer
+{
+    const long long a;
+
+    last_mer(long long _a) : a(_a) {}
+
+    __host__ __device__
+        long long operator()(const long long &x) const {
+        return x % a;
+    }
+};
+
+struct first_mer
+{
+    __host__ __device__
+        long long operator()(const long long& x) const {
+        return x >> 2;
+    }
+};
+
+
 
 size_t getline(char** lineptr, size_t* n, FILE* stream) {
     size_t pos;
@@ -101,10 +133,10 @@ int main()
 
     char* buf = NULL;  
     char* genotype = NULL;
-    size_t bufSize = 10;
+    size_t bufSize = 0;
     FILE* f;
     size_t line_size;
-    f = fopen("G:/chr100mb.fastq", "r"); 
+    f = fopen("D:/Pobrane_D/chr.fastq", "r"); 
 
     int i = 0;
     do
@@ -145,10 +177,17 @@ int main()
             printf("K_MER");
         }
 
-        //free(buf);
-
     } while (line_size > 0);
 
+    if (f != NULL) {
+        printf("KK");
+        fclose(f);   // zamkniêcie pliku i zapisanie zmian
+    }
+    else
+    {
+        printf("sth wrong");
+    }
+    free(buf);
     std::list<K_MER_NODE>::iterator it = K_MER_NODE_LIST.begin();
     std::set<long long> setOf_K_Mers;
     int allElements = K_MER_NODE_LIST.size();
@@ -166,16 +205,19 @@ int main()
         id_of_all_kmers_CPU[i] = val;
         std::advance(it, 1);
     }
+    for (int i = 0; i < 1000; i++)
+        printf("%lld\n", id_of_all_kmers_CPU[i]);
+
     setOf_K_Mers.clear();
     K_MER_NODE_LIST.clear();
-
+    printf("ok1\n");
     long long* id_of_all_kmers_GPU;
     cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * allElements);
     cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * allElements, cudaMemcpyHostToDevice);
     thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
     //int* new_end = thrust::unique(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
     free(id_of_all_kmers_CPU);
-
+    printf("ok2\n");
     long long* id_of_kmer_GPU;
     int* amount_of_kmer_GPU;
     cudaMalloc((void**)&id_of_kmer_GPU, sizeof(long long) * hashTableLength);
@@ -183,19 +225,42 @@ int main()
     thrust::pair<long long*, int*> new_end;
     new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
 
+    long long to_mod = pow(4, K - 1);
+    //C array,  weights = amount_of_kmer
+    long long* C;
+    cudaMalloc((void**)&C, sizeof(long long) * hashTableLength);
+    thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, C, last_mer(to_mod));
+    
+    //to do R array, transform id_of_kmer_GPU, reduce_by_key and transform again:
+    long long* temp;
+    cudaMalloc((void**)&temp, sizeof(long long) * hashTableLength);
+    thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, temp, first_mer());
 
+    long long* first;
+    int* second;
+    cudaMalloc((void**)&first, sizeof(long long) * hashTableLength);
+    cudaMalloc((void**)&second, sizeof(int) * hashTableLength);
+    thrust::pair<long long*, int*> end;
+    end = thrust::reduce_by_key(thrust::device, temp, temp + hashTableLength, thrust::make_constant_iterator(1), first, second);
+    
+    long long* a = (long long*)malloc(sizeof(long long) * hashTableLength);
+    long long* b = (long long*)malloc(sizeof(long long) * hashTableLength);
+    cudaMemcpy(a, second, sizeof(long long)* hashTableLength, cudaMemcpyDeviceToHost);
+    b[0] = 0;
+    for (int i = 1; i < hashTableLength; i++)
+        b[i] = b[i - 1] + a[i - 1];
+
+    //first kmer : h_data[i] >> 2, last kmer: h_data[i] % to_mod
+    long long* h = (long long*)malloc(sizeof(long long) * hashTableLength);
+    cudaMemcpy(h, C, sizeof(long long) * hashTableLength, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < hashTableLength; i++)
+        printf("%lld\n", h[i]);
+
+    printf("ok3\n");
     cudaFree(id_of_all_kmers_GPU);
     cudaFree(id_of_kmer_GPU);
     cudaFree(amount_of_kmer_GPU);
 
-    if (f != NULL) {
-        printf("KK");
-        fclose(f);   // zamkniêcie pliku i zapisanie zmian
-    }
-    else
-    {
-        printf("sth wrong");
-    }
 
     return 0;
 }
