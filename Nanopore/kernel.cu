@@ -136,7 +136,7 @@ int main()
     size_t bufSize = 0;
     FILE* f;
     size_t line_size;
-    f = fopen("D:/Pobrane_D/chr.fastq", "r"); 
+    f = fopen("G:/chr100mb.fastq", "r"); 
 
     int i = 0;
     do
@@ -196,11 +196,11 @@ int main()
     for (int i = 0; i < allElements; i++)
     {
         long long val = (*it).value;
-        if (setOf_K_Mers.find(val) == setOf_K_Mers.end()) // TODO: do it with thrust
-        {
-            hashTableLength++;
-            setOf_K_Mers.insert(val);
-        }
+        //if (setOf_K_Mers.find(val) == setOf_K_Mers.end()) // TODO: do it with thrust
+        //{
+        //    hashTableLength++;
+        //    setOf_K_Mers.insert(val);
+        //}
 
         id_of_all_kmers_CPU[i] = val;
         std::advance(it, 1);
@@ -215,7 +215,14 @@ int main()
     cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * allElements);
     cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * allElements, cudaMemcpyHostToDevice);
     thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
-    //int* new_end = thrust::unique(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
+    
+    //TODO: check if 199-203 code (hashTableLength) is same as hashTableLengthv2
+    long long* hashTableLengthv2;
+    cudaMalloc((void**)&hashTableLengthv2, sizeof(long long) * allElements);
+    long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, hashTableLengthv2);
+    hashTableLength = new_end_for_unique - hashTableLengthv2;
+    cudaFree(hashTableLengthv2);
+    //END
     free(id_of_all_kmers_CPU);
     printf("ok2\n");
     long long* id_of_kmer_GPU;
