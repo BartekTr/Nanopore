@@ -104,9 +104,10 @@ int main()
     K_MER_NODE *K_MER_NODES = NULL;
     int allElements = 0;
     char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);  
-    char* genotype = NULL;
+    char* genotype = (char*)malloc(MAX_SIZE * sizeof(char));
     std::filebuf f;
-    if (f.open("D:/Pobrane_D/chr.fastq", std::ios::binary | std::ios::in))
+    int length = 0;
+    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
@@ -115,19 +116,12 @@ int main()
             i++;
             if (i % 4 == 2) // Set A, C, T, G as BYTE
             {
-                int length = strlen(buf);
-                if (genotype != NULL)
-                {
-                    free(genotype);
-                    genotype = NULL;
-                }
-                genotype = (char*)malloc(length * sizeof(char));
+                length = strlen(buf);
                 memcpy(genotype, buf, length);
             }
 
             if (i % 4 == 0) // Set probability
             {
-                int length = strlen(genotype);
                 K_MER_NODE *arrGPU, *arr;
                 char* bufGPU, *genotypeGPU;
                 cudaMalloc((void**)&bufGPU, sizeof(K_MER_NODE) * length);
@@ -158,8 +152,8 @@ int main()
     {
         printf("sth wrong");
     }
-    printf("ok");
     free(buf);
+    free(genotype);
     std::set<long long> setOf_K_Mers;
     long long* id_of_all_kmers_CPU = (long long*)malloc(sizeof(long long) * allElements);
     int hashTableLength = 0;
