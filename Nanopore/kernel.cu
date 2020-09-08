@@ -21,7 +21,7 @@
 
 //code from https://stackoverflow.com/questions/735126/are-there-alternate-implementations-of-gnu-getline-interface/735472#735472
 
-#define K 8
+#define K 5
 #define MAX_SIZE 1024*1024
 
 typedef intptr_t ssize_t;
@@ -85,9 +85,10 @@ int main()
 
     char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);  
     std::string buf1;
-    char* genotype = NULL;
+    char* genotype = (char*)malloc(MAX_SIZE * sizeof(char));
     std::filebuf f;
-    if (f.open("D:/Pobrane_D/chr.fastq", std::ios::binary | std::ios::in))
+    int length;
+    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
@@ -96,19 +97,12 @@ int main()
             i++;
             if (i % 4 == 2) // Set A, C, T, G as BYTE
             {
-                int length = strlen(buf);
-                if (genotype != NULL)
-                {
-                    free(genotype);
-                    genotype = NULL;
-                }
-                genotype = (char*)malloc(length * sizeof(char));
+                length = strlen(buf);
                 memcpy(genotype, buf, length);
             }
 
             if (i % 4 == 0) // Set probability
             {
-                int length = strlen(genotype);
                 for (int x = 0; x < length - K; x++)
                 {
                     K_MER_NODE k_mer;
@@ -137,6 +131,7 @@ int main()
         printf("sth wrong");
     }
     free(buf);
+    free(genotype);
     std::list<K_MER_NODE>::iterator it = K_MER_NODE_LIST.begin();
     std::set<long long> setOf_K_Mers;
     int allElements = K_MER_NODE_LIST.size();
