@@ -21,7 +21,8 @@
 
 //code from https://stackoverflow.com/questions/735126/are-there-alternate-implementations-of-gnu-getline-interface/735472#735472
 
-#define K 5
+#define K 8
+#define MAX_SIZE 1024*1024
 
 typedef intptr_t ssize_t;
 typedef std::bitset<4> BYTE;
@@ -61,54 +62,6 @@ struct first_mer
     }
 };
 
-size_t getline(char** lineptr, size_t* n, FILE* stream) {
-    size_t pos;
-    int c;
-
-    if (lineptr == NULL || stream == NULL || n == NULL) {
-        errno = EINVAL;
-        return 0;
-    }
-
-    c = getc(stream);
-    if (c == EOF) {
-        return 0;
-    }
-
-    if (*lineptr == NULL) {
-        *lineptr = (char*)malloc(128);
-        if (*lineptr == NULL) {
-            return 0;
-        }
-        *n = 128;
-    }
-
-    pos = 0;
-    while (c != EOF) {
-        if (pos + 1 >= *n) {
-            size_t new_size = *n + (*n >> 2);
-            if (new_size < 128) {
-                new_size = 128;
-            }
-            char* new_ptr = (char*)realloc(*lineptr, new_size);
-            if (new_ptr == NULL) {
-                return 0;
-            }
-            *n = new_size;
-            *lineptr = new_ptr;
-        }
-
-        ((unsigned char*)(*lineptr))[pos++] = c;
-        if (c == '\n') {
-            break;
-        }
-        c = getc(stream);
-    }
-
-    (*lineptr)[pos] = '\0';
-    return pos;
-}
-
 long long get_value(char c)
 {
     long long value;
@@ -130,19 +83,17 @@ int main()
 {
     std::list<K_MER_NODE> K_MER_NODE_LIST = {};
 
-    char* buf = (char*)malloc(sizeof(char) * 100000);  
+    char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);  
+    std::string buf1;
     char* genotype = NULL;
-    size_t bufSize = 0;
     std::filebuf f;
-    if (f.open("D:/Pobrane_D/chr.fastq", std::ios::in))
+    if (f.open("D:/Pobrane_D/chr.fastq", std::ios::binary | std::ios::in))
     {
-        std::istream is(&f);    
+        std::istream is(&f);
         int i = 0;
-        while (is.getline(buf, 100000))
+        while (is.getline(buf, MAX_SIZE))
         {
             i++;
-            std::cout << buf;
-            printf("ok");
             if (i % 4 == 2) // Set A, C, T, G as BYTE
             {
                 int length = strlen(buf);
