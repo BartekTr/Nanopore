@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <iostream>
+#include <fstream>      // std::filebuf
 
 #include <bitset>
 #include <list>
@@ -58,8 +60,6 @@ struct first_mer
         return x >> 2;
     }
 };
-
-
 
 size_t getline(char** lineptr, size_t* n, FILE* stream) {
     size_t pos;
@@ -129,59 +129,58 @@ long long get_value(char c)
 int main()
 {
     std::list<K_MER_NODE> K_MER_NODE_LIST = {};
-    //std::map<K_MER_NODE, int> 
 
-    char* buf = NULL;  
+    char* buf = (char*)malloc(sizeof(char) * 100000);  
     char* genotype = NULL;
     size_t bufSize = 0;
-    FILE* f;
-    size_t line_size;
-    f = fopen("D:/Pobrane_D/chr.fastq", "r"); 
-
-    int i = 0;
-    do
+    std::filebuf f;
+    if (f.open("D:/Pobrane_D/chr.fastq", std::ios::in))
     {
-        i++;
-        line_size = 0;
-        line_size = getline(&buf, &bufSize, f);
-        if (i % 4 == 2) // Set A, C, T, G as BYTE
+        std::istream is(&f);    
+        int i = 0;
+        while (is.getline(buf, 100000))
         {
-            int length = strlen(buf);
-            if (genotype != NULL)
+            i++;
+            //line_size = 0;
+            std::cout << buf;
+            printf("ok");
+            if (i % 4 == 2) // Set A, C, T, G as BYTE
             {
-                free(genotype);
-                genotype = NULL;
-            }
-            genotype = (char*)malloc(length * sizeof(char));
-            memcpy(genotype, buf, length);
-        }
-
-        if (i % 4 == 0) // Set probability
-        {
-            int length = strlen(genotype);
-            for (int x = 0; x < length - K; x++)
-            {
-                K_MER_NODE k_mer;
-                k_mer.value = 0;
-                k_mer.K_MER_QUALITY = 0;
-                long prob = 0;
-                for (int k_len = 0; k_len < K; k_len++)
+                int length = strlen(buf);
+                if (genotype != NULL)
                 {
-                    k_mer.value += get_value(genotype[x + k_len]) * pow(4, K - k_len - 1);
-                    prob += (int)buf[x + k_len];
+                    free(genotype);
+                    genotype = NULL;
                 }
-
-                k_mer.K_MER_QUALITY = prob / K;
-                K_MER_NODE_LIST.push_back(k_mer);               
+                genotype = (char*)malloc(length * sizeof(char));
+                memcpy(genotype, buf, length);
             }
-            printf("K_MER");
+
+            if (i % 4 == 0) // Set probability
+            {
+                int length = strlen(genotype);
+                for (int x = 0; x < length - K; x++)
+                {
+                    K_MER_NODE k_mer;
+                    k_mer.value = 0;
+                    k_mer.K_MER_QUALITY = 0;
+                    long prob = 0;
+                    for (int k_len = 0; k_len < K; k_len++)
+                    {
+                        k_mer.value += get_value(genotype[x + k_len]) * pow(4, K - k_len - 1);
+                        prob += (int)buf[x + k_len];
+                    }
+
+                    k_mer.K_MER_QUALITY = prob / K;
+                    K_MER_NODE_LIST.push_back(k_mer);
+                }
+                printf("K_MER");
+            }
         }
-
-    } while (line_size > 0);
-
-    if (f != NULL) {
+    }
+    if (f.is_open()) {
         printf("KK");
-        fclose(f);   // zamkniêcie pliku i zapisanie zmian
+        f.close();   // zamkniêcie pliku i zapisanie zmian
     }
     else
     {
@@ -205,8 +204,12 @@ int main()
         id_of_all_kmers_CPU[i] = val;
         std::advance(it, 1);
     }
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < hashTableLength; i++)
+    {
         printf("%lld\n", id_of_all_kmers_CPU[i]);
+        printf("in 4:");
+        print_in_4(id_of_all_kmers_CPU[i], K);
+    }
 
     setOf_K_Mers.clear();
     K_MER_NODE_LIST.clear();
@@ -254,7 +257,8 @@ int main()
     long long* h = (long long*)malloc(sizeof(long long) * hashTableLength);
     cudaMemcpy(h, C, sizeof(long long) * hashTableLength, cudaMemcpyDeviceToHost);
     for (int i = 0; i < hashTableLength; i++)
-        printf("%lld\n", h[i]);
+        print_in_4(h[i], K);
+        //printf("%lld\n", h[i]);
 
     printf("ok3\n");
     cudaFree(id_of_all_kmers_GPU);
