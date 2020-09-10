@@ -34,7 +34,7 @@ typedef struct K_MER_NODE
 
 } K_MER_NODE;
 
-
+// Changing DNA code to numbers
 __device__ __host__ long long get_value(char c)
 {
     long long value;
@@ -52,6 +52,7 @@ __device__ __host__ long long get_value(char c)
     return value;
 }
 
+// Decoding K-mers from numbers to special code
 __global__ void SetKMerValues(K_MER_NODE* out, char *genotype, char* buf, int length)
 {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x ; i < length; i += blockDim.x * gridDim.x)
@@ -70,6 +71,7 @@ __global__ void SetKMerValues(K_MER_NODE* out, char *genotype, char* buf, int le
     }
 }
 
+// Reading encoded K-mer
 void print_in_4(long long value, int k)
 {
     for (int i = k-1; i >= 0; --i)
@@ -100,20 +102,25 @@ struct first_mer
 int main()
 {
     cudaSetDevice(0);
-    K_MER_NODE *K_MER_NODES = NULL;
+
+    // Readed K-mer nodes before processing
+    K_MER_NODE *K_MER_NODES = (K_MER_NODE*)malloc(sizeof(K_MER_NODE) * (MAX_SIZE) * 60);;
+
+    // All K-mers
     int allElements = 0;
-    char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);  
-    char* genotype = (char*)malloc(MAX_SIZE * sizeof(char));
+    
+    // Temporary data for reading file
     std::filebuf f;
     int length = 0;
-    K_MER_NODE* arrGPU;
+    char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);
+    char* genotype = (char*)malloc(sizeof(char) * MAX_SIZE);
     char* bufGPU, * genotypeGPU;
-    //tmp
+    K_MER_NODE* arrGPU;
     cudaMalloc((void**)&bufGPU, sizeof(char) * MAX_SIZE);
     cudaMalloc((void**)&genotypeGPU, sizeof(char) * MAX_SIZE);
     cudaMalloc((void**)&arrGPU, sizeof(K_MER_NODE) * MAX_SIZE);
 
-    if (f.open("D:/Pobrane_D/chr100mb.fastq", std::ios::binary | std::ios::in))
+    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
@@ -128,74 +135,78 @@ int main()
 
             if (i % 4 == 0) // Set probability
             {
-                //K_MER_NODE *arrGPU, *arr;
-                //char* bufGPU, *genotypeGPU;
-                //cudaMalloc((void**)&bufGPU, sizeof(K_MER_NODE) * length);
-                //cudaMemcpy(bufGPU, buf, sizeof(char) * length, cudaMemcpyHostToDevice);
-                //cudaMalloc((void**)&genotypeGPU, sizeof(K_MER_NODE) * length);
-                //cudaMemcpy(genotypeGPU, genotype, sizeof(char) * length, cudaMemcpyHostToDevice);
-                //cudaMalloc((void**)&arrGPU, sizeof(K_MER_NODE) * (length - K));
-
+                // Copying currently readed data to Device
                 cudaMemcpy(bufGPU, buf, sizeof(char) * length, cudaMemcpyHostToDevice);
                 cudaMemcpy(genotypeGPU, genotype, sizeof(char) * length, cudaMemcpyHostToDevice);
+
+                // Processing readed data into K-mers with own way
                 SetKMerValues << <(length - K)/256 + 1, 256 >> > (arrGPU, genotypeGPU, bufGPU, length - K);
                 cudaDeviceSynchronize();
+
+                // Copying data back to Host
+                cudaMemcpy(K_MER_NODES + allElements, arrGPU, sizeof(K_MER_NODE) * (length - K), cudaMemcpyDeviceToHost);
+
+                // Increasing total amount of K-mers
                 allElements += length - K;
-                if (K_MER_NODES == NULL)
-                    K_MER_NODES = (K_MER_NODE*)malloc(sizeof(K_MER_NODE) * (MAX_SIZE)*60);
-                //else
-                //    K_MER_NODES = (K_MER_NODE*)realloc(K_MER_NODES, allElements * sizeof(K_MER_NODE));
-                cudaMemcpy(K_MER_NODES + allElements - length + K, arrGPU, sizeof(K_MER_NODE) * (length - K), cudaMemcpyDeviceToHost);
-                //cudaFree(bufGPU);
-                //cudaFree(genotypeGPU);
-                //cudaFree(arrGPU);
                 printf("K_MER");
             }
         }
     }
-    if (f.is_open()) {
-        printf("KK");
-        f.close();   // zamkniêcie pliku i zapisanie zmian
-    }
-    else
-    {
-        printf("sth wrong");
-    }
-    //tmp
+
+    // Delete data for reading file
+    free(buf);
+    free(genotype);
     cudaFree(bufGPU);
     cudaFree(genotypeGPU);
     cudaFree(arrGPU);
 
+    // File close and error handling
+    if (f.is_open()) {
+        printf("File closed\n");
+        f.close();
+    }
+    else
+    {
+        printf("Error during file closing\n");
+    }
 
-    free(buf);
-    free(genotype);
+    // Allocating data for K-mers and copying this data
     long long* id_of_all_kmers_CPU = (long long*)malloc(sizeof(long long) * allElements);
-    int hashTableLength = 0;
-    for (int i = 0; i < allElements; i++)
-        id_of_all_kmers_CPU[i] = K_MER_NODES[i].value;
     for (int i = 0; i < allElements; i++)
     {
-        if (i > allElements - 10 || i < 10)
-            printf("%lld\n", id_of_all_kmers_CPU[i]);
-        //printf("in 4:");
-        //print_in_4(id_of_all_kmers_CPU[i], K);
+        id_of_all_kmers_CPU[i] = K_MER_NODES[i].value;
     }
+
     free(K_MER_NODES);
+
+    // Developer code
+    //for (int i = 0; i < allElements; i++)
+    //{
+    //    if (i > allElements - 10 || i < 10)
+    //        printf("%lld\n", id_of_all_kmers_CPU[i]);
+    //    //printf("in 4:");
+    //    //print_in_4(id_of_all_kmers_CPU[i], K);
+    //}
+
+
+
     printf("ok1\n");
+
+    //Sorting K-mers
     long long* id_of_all_kmers_GPU;
     cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * allElements);
     cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * allElements, cudaMemcpyHostToDevice);
     thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
+    free(id_of_all_kmers_CPU);
     
-    //TODO: check if 199-203 code (hashTableLength) is same as hashTableLengthv2
+    // hashTableLengthv2 - amount of different K-mers
     long long* hashTableLengthv2;
     cudaMalloc((void**)&hashTableLengthv2, sizeof(long long) * allElements);
     long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, hashTableLengthv2);
-    hashTableLength = new_end_for_unique - hashTableLengthv2;
+    int hashTableLength = new_end_for_unique - hashTableLengthv2;
     cudaFree(hashTableLengthv2);
-    //END
-    free(id_of_all_kmers_CPU);
-    printf("ok2\n");
+
+    // Getting amount of different K-mers
     long long* id_of_kmer_GPU;
     int* amount_of_kmer_GPU;
     cudaMalloc((void**)&id_of_kmer_GPU, sizeof(long long) * hashTableLength);
