@@ -107,7 +107,14 @@ int main()
     char* genotype = (char*)malloc(MAX_SIZE * sizeof(char));
     std::filebuf f;
     int length = 0;
-    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
+    K_MER_NODE* arrGPU, * arr;
+    char* bufGPU, * genotypeGPU;
+    //tmp
+    cudaMalloc((void**)&bufGPU, sizeof(K_MER_NODE) * MAX_SIZE);
+    cudaMalloc((void**)&genotypeGPU, sizeof(K_MER_NODE) * MAX_SIZE);
+    cudaMalloc((void**)&arrGPU, sizeof(K_MER_NODE) * MAX_SIZE);
+
+    if (f.open("D:/Pobrane_D/chr100mb.fastq", std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
@@ -122,24 +129,27 @@ int main()
 
             if (i % 4 == 0) // Set probability
             {
-                K_MER_NODE *arrGPU, *arr;
-                char* bufGPU, *genotypeGPU;
-                cudaMalloc((void**)&bufGPU, sizeof(K_MER_NODE) * length);
+                //K_MER_NODE *arrGPU, *arr;
+                //char* bufGPU, *genotypeGPU;
+                //cudaMalloc((void**)&bufGPU, sizeof(K_MER_NODE) * length);
+                //cudaMemcpy(bufGPU, buf, sizeof(char) * length, cudaMemcpyHostToDevice);
+                //cudaMalloc((void**)&genotypeGPU, sizeof(K_MER_NODE) * length);
+                //cudaMemcpy(genotypeGPU, genotype, sizeof(char) * length, cudaMemcpyHostToDevice);
+                //cudaMalloc((void**)&arrGPU, sizeof(K_MER_NODE) * (length - K));
+
                 cudaMemcpy(bufGPU, buf, sizeof(char) * length, cudaMemcpyHostToDevice);
-                cudaMalloc((void**)&genotypeGPU, sizeof(K_MER_NODE) * length);
                 cudaMemcpy(genotypeGPU, genotype, sizeof(char) * length, cudaMemcpyHostToDevice);
-                cudaMalloc((void**)&arrGPU, sizeof(K_MER_NODE) * (length - K));
-                SetKMerValues << <1024, 1024 >> > (arrGPU, genotypeGPU, bufGPU, length - K);
+                SetKMerValues << <256, (length - K)/256 + 1 >> > (arrGPU, genotypeGPU, bufGPU, length - K);
                 cudaDeviceSynchronize();
                 allElements += length - K;
                 if (K_MER_NODES == NULL)
-                    K_MER_NODES = (K_MER_NODE*)malloc(sizeof(K_MER_NODE) * (length - K));
-                else
-                    K_MER_NODES = (K_MER_NODE*)realloc(K_MER_NODES, allElements * sizeof(K_MER_NODE));
+                    K_MER_NODES = (K_MER_NODE*)malloc(sizeof(K_MER_NODE) * (MAX_SIZE)*60);
+                //else
+                //    K_MER_NODES = (K_MER_NODE*)realloc(K_MER_NODES, allElements * sizeof(K_MER_NODE));
                 cudaMemcpy(K_MER_NODES + allElements - length + K, arrGPU, sizeof(K_MER_NODE) * (length - K), cudaMemcpyDeviceToHost);
-                cudaFree(bufGPU);
-                cudaFree(genotypeGPU);
-                cudaFree(arrGPU);
+                //cudaFree(bufGPU);
+                //cudaFree(genotypeGPU);
+                //cudaFree(arrGPU);
                 printf("K_MER");
             }
         }
@@ -152,6 +162,11 @@ int main()
     {
         printf("sth wrong");
     }
+    //tmp
+    cudaFree(bufGPU);
+    cudaFree(genotypeGPU);
+    cudaFree(arrGPU);
+
     free(buf);
     free(genotype);
     std::set<long long> setOf_K_Mers;
@@ -159,12 +174,12 @@ int main()
     int hashTableLength = 0;
     for (int i = 0; i < allElements; i++)
         id_of_all_kmers_CPU[i] = K_MER_NODES[i].value;
-    for (int i = 0; i < hashTableLength; i++)
-    {
-        printf("%lld\n", id_of_all_kmers_CPU[i]);
-        printf("in 4:");
-        print_in_4(id_of_all_kmers_CPU[i], K);
-    }
+    //for (int i = 0; i < allElements; i++)
+    //{
+    //    printf("%lld\n", id_of_all_kmers_CPU[i]);
+    //    printf("in 4:");
+    //    print_in_4(id_of_all_kmers_CPU[i], K);
+    //}
     free(K_MER_NODES);
     setOf_K_Mers.clear();
     K_MER_NODE_LIST.clear();
