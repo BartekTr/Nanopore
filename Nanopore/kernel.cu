@@ -21,23 +21,23 @@
 #include <thrust/device_vector.h>
 
 
-#define K 5
+#define K 31
 #define MAX_SIZE 1024*1024
-#define MIN_K_MER_QUALITY 100
+#define MIN_K_MER_QUALITY 60
 
 typedef intptr_t ssize_t;
 
 typedef struct K_MER_NODE
 {
-    long long value;
+    unsigned long long value;
     short K_MER_QUALITY;
 
 } K_MER_NODE;
 
 // Changing DNA code to numbers
-__device__ __host__ long long get_value(char c)
+__device__ __host__ unsigned long long get_value(char c)
 {
-    long long value;
+    unsigned long long value;
     if (c == 'A')
         value = 0;
     else if (c == 'C')
@@ -62,7 +62,7 @@ __global__ void SetKMerValues(K_MER_NODE* out, char* genotype, char* buf, int le
         int quality = 32767;
         for (int k_len = 0; k_len < K; k_len++)
         {
-            k_mer.value += get_value(genotype[i + k_len]) * (long long)pow((float)4, (float)K - k_len - 1);
+            k_mer.value += get_value(genotype[i + k_len]) * (unsigned long long)pow((float)4, (float)K - k_len - 1);
 
             // Setting K-mer quality as minimum value of single reading
             if (quality > (int)buf[i + k_len])
@@ -77,7 +77,7 @@ __global__ void SetKMerValues(K_MER_NODE* out, char* genotype, char* buf, int le
 }
 
 // Reading encoded K-mer
-void print_in_4(long long value, int k)
+void print_in_4(unsigned long long value, int k)
 {
     for (int i = k-1; i >= 0; --i)
         printf("%lld", (value >> (2 * i)) % 4);
@@ -86,12 +86,12 @@ void print_in_4(long long value, int k)
 
 struct last_mer
 {
-    const long long a;
+    const unsigned long long a;
 
-    last_mer(long long _a) : a(_a) {}
+    last_mer(unsigned long long _a) : a(_a) {}
 
     __host__ __device__
-        long long operator()(const long long &x) const {
+        unsigned long long operator()(const unsigned long long &x) const {
         return x % a;
     }
 };
@@ -99,7 +99,7 @@ struct last_mer
 struct first_mer
 {
     __host__ __device__
-        long long operator()(const long long& x) const {
+        unsigned long long operator()(const unsigned long long& x) const {
         return x >> 2;
     }
 };
@@ -176,14 +176,13 @@ int main()
     }
 
     // Allocating data for K-mers with enough quality and copy this data
-    long long* id_of_all_kmers_CPU = (long long*)malloc(sizeof(long long) * allElements);
+    unsigned long long* id_of_all_kmers_CPU = (unsigned long long*)malloc(sizeof(unsigned long long) * allElements);
     int elementsWithEnoughQuality = 0;
     for (int i = 0; i < allElements; i++)
     {
         if (K_MER_NODES[i].K_MER_QUALITY > MIN_K_MER_QUALITY)
         {
-            
-            printf("\n K_MER_QUALITY: %d", K_MER_NODES[i].K_MER_QUALITY);
+            //printf("\n K_MER_QUALITY: %d", K_MER_NODES[i].K_MER_QUALITY);
             id_of_all_kmers_CPU[elementsWithEnoughQuality] = K_MER_NODES[i].value;
             elementsWithEnoughQuality++;
         }
@@ -204,55 +203,55 @@ int main()
     printf("ok1\n");
 
     //Sorting K-mers
-    long long* id_of_all_kmers_GPU;
-    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * elementsWithEnoughQuality);
-    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * elementsWithEnoughQuality, cudaMemcpyHostToDevice);
+    unsigned long long* id_of_all_kmers_GPU;
+    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(unsigned long long) * elementsWithEnoughQuality);
+    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(unsigned long long) * elementsWithEnoughQuality, cudaMemcpyHostToDevice);
     thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality);
     free(id_of_all_kmers_CPU);
     
     // hashTableLengthv2 - amount of different K-mers
-    long long* hashTableLengthv2;
-    cudaMalloc((void**)&hashTableLengthv2, sizeof(long long) * elementsWithEnoughQuality);
-    long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, hashTableLengthv2);
+    unsigned long long* hashTableLengthv2;
+    cudaMalloc((void**)&hashTableLengthv2, sizeof(unsigned long long) * elementsWithEnoughQuality);
+    unsigned long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, hashTableLengthv2);
     int hashTableLength = new_end_for_unique - hashTableLengthv2;
     cudaFree(hashTableLengthv2);
 
     // Getting amount of different K-mers
-    long long* id_of_kmer_GPU;
+    unsigned long long* id_of_kmer_GPU;
     int* amount_of_kmer_GPU;
-    cudaMalloc((void**)&id_of_kmer_GPU, sizeof(long long) * hashTableLength);
+    cudaMalloc((void**)&id_of_kmer_GPU, sizeof(unsigned long long) * hashTableLength);
     cudaMalloc((void**)&amount_of_kmer_GPU, sizeof(int) * hashTableLength);
-    thrust::pair<long long*, int*> new_end;
+    thrust::pair<unsigned long long*, int*> new_end;
     new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
 
-    long long to_mod = pow(4, K - 1);
+    unsigned long long to_mod = pow(4, K - 1);
     //C array,  weights = amount_of_kmer
-    long long* C;
-    cudaMalloc((void**)&C, sizeof(long long) * hashTableLength);
+    unsigned long long* C;
+    cudaMalloc((void**)&C, sizeof(unsigned long long) * hashTableLength);
     thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, C, last_mer(to_mod));
     
     //to do R array, transform id_of_kmer_GPU, reduce_by_key and transform again:
-    long long* temp;
-    cudaMalloc((void**)&temp, sizeof(long long) * hashTableLength);
+    unsigned long long* temp;
+    cudaMalloc((void**)&temp, sizeof(unsigned long long) * hashTableLength);
     thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, temp, first_mer());
 
-    long long* first;
+    unsigned long long* first;
     int* second;
-    cudaMalloc((void**)&first, sizeof(long long) * hashTableLength);
+    cudaMalloc((void**)&first, sizeof(unsigned long long) * hashTableLength);
     cudaMalloc((void**)&second, sizeof(int) * hashTableLength);
-    thrust::pair<long long*, int*> end;
+    thrust::pair<unsigned long long*, int*> end;
     end = thrust::reduce_by_key(thrust::device, temp, temp + hashTableLength, thrust::make_constant_iterator(1), first, second);
     
-    long long* a = (long long*)malloc(sizeof(long long) * hashTableLength);
-    long long* b = (long long*)malloc(sizeof(long long) * hashTableLength);
-    cudaMemcpy(a, second, sizeof(long long)* hashTableLength, cudaMemcpyDeviceToHost);
+    unsigned long long* a = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+    unsigned long long* b = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+    cudaMemcpy(a, second, sizeof(unsigned long long)* hashTableLength, cudaMemcpyDeviceToHost);
     b[0] = 0;
     for (int i = 1; i < hashTableLength; i++)
         b[i] = b[i - 1] + a[i - 1];
 
     //first kmer : h_data[i] >> 2, last kmer: h_data[i] % to_mod
-    long long* h = (long long*)malloc(sizeof(long long) * hashTableLength);
-    cudaMemcpy(h, C, sizeof(long long) * hashTableLength, cudaMemcpyDeviceToHost);
+    unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+    cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
     for (int i = 0; i < hashTableLength; i++)
         print_in_4(h[i], K);
         //printf("%lld\n", h[i]);
