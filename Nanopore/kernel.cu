@@ -23,9 +23,9 @@
 
 #define K 5
 #define MAX_SIZE 1024*1024
+#define MIN_K_MER_QUALITY 100
 
 typedef intptr_t ssize_t;
-typedef std::bitset<4> BYTE;
 
 typedef struct K_MER_NODE
 {
@@ -53,20 +53,25 @@ __device__ __host__ long long get_value(char c)
 }
 
 // Decoding K-mers from numbers to special code
-__global__ void SetKMerValues(K_MER_NODE* out, char *genotype, char* buf, int length)
+__global__ void SetKMerValues(K_MER_NODE* out, char* genotype, char* buf, int length)
 {
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x ; i < length; i += blockDim.x * gridDim.x)
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < length; i += blockDim.x * gridDim.x)
     {
         K_MER_NODE k_mer;
         k_mer.value = 0;
-        k_mer.K_MER_QUALITY = 0;
-        int prob = 0;
+        int quality = 32767;
         for (int k_len = 0; k_len < K; k_len++)
         {
-            k_mer.value += get_value(genotype[i + k_len]) * (long long)pow((float)4,(float) K - k_len - 1);
-            prob += (int)buf[i + k_len];
+            k_mer.value += get_value(genotype[i + k_len]) * (long long)pow((float)4, (float)K - k_len - 1);
+
+            // Setting K-mer quality as minimum value of single reading
+            if (quality > (int)buf[i + k_len])
+            {
+                quality = (int)buf[i + k_len];
+            }
         }
-        k_mer.K_MER_QUALITY = prob / K;
+
+        k_mer.K_MER_QUALITY = quality;
         out[i] = k_mer;
     }
 }
@@ -170,13 +175,22 @@ int main()
         printf("Error during file closing\n");
     }
 
-    // Allocating data for K-mers and copying this data
+    // Allocating data for K-mers with enough quality and copy this data
     long long* id_of_all_kmers_CPU = (long long*)malloc(sizeof(long long) * allElements);
+    int elementsWithEnoughQuality = 0;
     for (int i = 0; i < allElements; i++)
     {
-        id_of_all_kmers_CPU[i] = K_MER_NODES[i].value;
+        if (K_MER_NODES[i].K_MER_QUALITY > MIN_K_MER_QUALITY)
+        {
+            
+            printf("\n K_MER_QUALITY: %d", K_MER_NODES[i].K_MER_QUALITY);
+            id_of_all_kmers_CPU[elementsWithEnoughQuality] = K_MER_NODES[i].value;
+            elementsWithEnoughQuality++;
+        }
     }
 
+    printf("\n All K-MERS: %d", allElements);
+    printf("\n K-MERS with enough quality: %d", elementsWithEnoughQuality);
     free(K_MER_NODES);
 
     // Developer code
@@ -187,22 +201,19 @@ int main()
     //    //printf("in 4:");
     //    //print_in_4(id_of_all_kmers_CPU[i], K);
     //}
-
-
-
     printf("ok1\n");
 
     //Sorting K-mers
     long long* id_of_all_kmers_GPU;
-    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * allElements);
-    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * allElements, cudaMemcpyHostToDevice);
-    thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements);
+    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(long long) * elementsWithEnoughQuality);
+    cudaMemcpy(id_of_all_kmers_GPU, id_of_all_kmers_CPU, sizeof(long long) * elementsWithEnoughQuality, cudaMemcpyHostToDevice);
+    thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality);
     free(id_of_all_kmers_CPU);
     
     // hashTableLengthv2 - amount of different K-mers
     long long* hashTableLengthv2;
-    cudaMalloc((void**)&hashTableLengthv2, sizeof(long long) * allElements);
-    long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, hashTableLengthv2);
+    cudaMalloc((void**)&hashTableLengthv2, sizeof(long long) * elementsWithEnoughQuality);
+    long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, hashTableLengthv2);
     int hashTableLength = new_end_for_unique - hashTableLengthv2;
     cudaFree(hashTableLengthv2);
 
@@ -212,7 +223,7 @@ int main()
     cudaMalloc((void**)&id_of_kmer_GPU, sizeof(long long) * hashTableLength);
     cudaMalloc((void**)&amount_of_kmer_GPU, sizeof(int) * hashTableLength);
     thrust::pair<long long*, int*> new_end;
-    new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + allElements, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
+    new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
 
     long long to_mod = pow(4, K - 1);
     //C array,  weights = amount_of_kmer
