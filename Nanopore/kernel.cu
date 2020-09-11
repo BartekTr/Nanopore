@@ -235,10 +235,20 @@ int main()
     //first kmer : h_data[i] >> 2, last kmer: h_data[i] % to_mod
     unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
     cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
+    //C = edges array on GPU
+    //h = edges array on CPU
+    //b = array of starting positions
     for (int i = 0; i < hashTableLength; i++)
         print_in_4(h[i], K);
 
     printf("ok3\n");
+    free(a);
+    free(b);
+    free(h);
+    cudaFree(temp);
+    cudaFree(first);
+    cudaFree(second);
+    cudaFree(C);
     cudaFree(id_of_all_kmers_GPU);
     cudaFree(id_of_kmer_GPU);
     cudaFree(amount_of_kmer_GPU);
