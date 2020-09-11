@@ -204,7 +204,10 @@ int main()
     unsigned long long* C;
     cudaMalloc((void**)&C, sizeof(unsigned long long) * hashTableLength);
     thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, C, last_mer(to_mod));
-    
+    unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+    cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
+    cudaFree(C);
+
     //to do R array, transform id_of_kmer_GPU, reduce_by_key and transform again:
     unsigned long long* temp;
     cudaMalloc((void**)&temp, sizeof(unsigned long long) * hashTableLength);
@@ -216,21 +219,28 @@ int main()
     cudaMalloc((void**)&second, sizeof(int) * hashTableLength);
     thrust::pair<unsigned long long*, int*> end;
     end = thrust::reduce_by_key(thrust::device, temp, temp + hashTableLength, thrust::make_constant_iterator(1), first, second);
-    
+    cudaFree(temp);
+    cudaFree(first);
+
     unsigned long long* a = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
     unsigned long long* b = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
     cudaMemcpy(a, second, sizeof(unsigned long long)* hashTableLength, cudaMemcpyDeviceToHost);
+    cudaFree(second);
     b[0] = 0;
     for (int i = 1; i < hashTableLength; i++)
         b[i] = b[i - 1] + a[i - 1];
 
     //first kmer : h_data[i] >> 2, last kmer: h_data[i] % to_mod
-    unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
-    cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
-    //for (int i = 0; i < hashTableLength; i++)
-    //    print_in_4(h[i], K);
+    //C = edges array on GPU
+    //h = edges array on CPU
+    //b = array of starting positions
+    for (int i = 0; i < hashTableLength; i++)
+        print_in_4(h[i], K);
 
     printf("ok3\n");
+    free(a);
+    free(b);
+    free(h);
     cudaFree(id_of_all_kmers_GPU);
     cudaFree(id_of_kmer_GPU);
     cudaFree(amount_of_kmer_GPU);
