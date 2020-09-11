@@ -30,14 +30,6 @@
 #define MIN_K_MER_QUALITY 60
 #define MAX_K_MERS_TO_ALLOCATE 500000000
 
-typedef intptr_t ssize_t;
-
-typedef struct K_MER_NODE
-{
-    unsigned long long value;
-    short K_MER_QUALITY;
-
-} K_MER_NODE;
 
 // Changing DNA code to numbers
 __device__ __host__ unsigned long long get_value(char c)
@@ -58,7 +50,7 @@ __device__ __host__ unsigned long long get_value(char c)
 }
 
 // Decoding K-mers from numbers to special code
-__global__ void SetKMerValues(char* genotype, char* buf, int length, unsigned long long* id_of_good_kmers_GPU, int* goodQualityElementsGpu)
+__global__ void SetKMerValues(char* genotype, char* buf, int length, unsigned long long* id_of_good_kmers_GPU, unsigned long long* goodQualityElementsGpu)
 {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < length; i += blockDim.x * gridDim.x)
     {
@@ -117,7 +109,7 @@ int main()
     cudaSetDevice(0);
 
     // All K-mers
-    int allElements = 0;
+    long long allElements = 0;
     
     // Temporary data for reading file
     std::filebuf f;
@@ -129,10 +121,10 @@ int main()
     cudaMalloc((void**)&genotypeGPU, sizeof(char) * MAX_SIZE);
 
     // Data for processing file
-    int elementsWithEnoughQuality = 0;
-    int* goodQualityElementsGpu;
-    cudaMalloc((void**)&goodQualityElementsGpu, sizeof(int));
-    cudaMemcpy(goodQualityElementsGpu, &elementsWithEnoughQuality, sizeof(int), cudaMemcpyHostToDevice);
+    unsigned long long elementsWithEnoughQuality = 0;
+    unsigned long long* goodQualityElementsGpu;
+    cudaMalloc((void**)&goodQualityElementsGpu, sizeof(unsigned long long));
+    cudaMemcpy(goodQualityElementsGpu, &elementsWithEnoughQuality, sizeof(unsigned long long), cudaMemcpyHostToDevice);
 
     // K-Mers with enough quality
     unsigned long long* id_of_all_kmers_GPU;
@@ -162,7 +154,7 @@ int main()
                 cudaDeviceSynchronize();
 
                 allElements += length - K;
-                printf("K_MER");
+                //printf("K_MER");
             }
         }
     }
@@ -184,9 +176,9 @@ int main()
     }
 
     // Readed data summary
-    cudaMemcpy(&elementsWithEnoughQuality, goodQualityElementsGpu, sizeof(int), cudaMemcpyDeviceToHost);
-    printf("\n All K-MERS: %d", allElements);
-    printf("\n K-MERS with enough quality: %d", elementsWithEnoughQuality);
+    cudaMemcpy(&elementsWithEnoughQuality, goodQualityElementsGpu, sizeof(unsigned long long), cudaMemcpyDeviceToHost);
+    printf("\n All K-MERS: %llu", allElements);
+    printf("\n K-MERS with enough quality: %llu", elementsWithEnoughQuality);
     printf("ok1\n");
     
     //Sorting K-mers
@@ -235,8 +227,8 @@ int main()
     //first kmer : h_data[i] >> 2, last kmer: h_data[i] % to_mod
     unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
     cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
-    for (int i = 0; i < hashTableLength; i++)
-        print_in_4(h[i], K);
+    //for (int i = 0; i < hashTableLength; i++)
+    //    print_in_4(h[i], K);
 
     printf("ok3\n");
     cudaFree(id_of_all_kmers_GPU);
