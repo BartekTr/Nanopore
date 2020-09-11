@@ -242,6 +242,7 @@ int main()
     cudaFree(id_of_all_kmers_GPU);
     cudaFree(id_of_kmer_GPU);
     cudaFree(amount_of_kmer_GPU);
+    cudaFree(goodQualityElementsGpu);
 
     return 0;
 }
