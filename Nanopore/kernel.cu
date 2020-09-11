@@ -27,7 +27,7 @@
 
 #define K 31
 #define MAX_SIZE 1024*1024
-#define MIN_K_MER_QUALITY 60
+#define MIN_K_MER_QUALITY 50
 #define MAX_K_MERS_TO_ALLOCATE 500000000
 
 
@@ -130,7 +130,7 @@ int main()
     unsigned long long* id_of_all_kmers_GPU;
     cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(unsigned long long) * MAX_K_MERS_TO_ALLOCATE);
 
-    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
+    if (f.open("G:/chr1.fastq", std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
@@ -198,6 +198,7 @@ int main()
     cudaMalloc((void**)&amount_of_kmer_GPU, sizeof(int) * hashTableLength);
     thrust::pair<unsigned long long*, int*> new_end;
     new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
+    cudaFree(id_of_all_kmers_GPU);
 
     unsigned long long to_mod = pow(4, K - 1);
     //C array,  weights = amount_of_kmer
@@ -234,14 +235,13 @@ int main()
     //C = edges array on GPU
     //h = edges array on CPU
     //b = array of starting positions
-    for (int i = 0; i < hashTableLength; i++)
-        print_in_4(h[i], K);
+    //for (int i = 0; i < hashTableLength; i++)
+    //    print_in_4(h[i], K);
 
     printf("ok3\n");
     free(a);
     free(b);
     free(h);
-    cudaFree(id_of_all_kmers_GPU);
     cudaFree(id_of_kmer_GPU);
     cudaFree(amount_of_kmer_GPU);
     cudaFree(goodQualityElementsGpu);
