@@ -28,6 +28,7 @@
 #define K 31
 #define MAX_SIZE 1024*1024
 #define MIN_K_MER_QUALITY 50
+#define AVERAGE_K_MER_QUALITY 80
 #define MAX_K_MERS_TO_ALLOCATE 500000000
 
 
@@ -56,19 +57,29 @@ __global__ void SetKMerValues(char* genotype, char* buf, int length, unsigned lo
     {
         unsigned long long decodedValue = 0;
         int quality = 32767;
+        int qualitySum = 0;
         for (int k_len = 0; k_len < K; k_len++)
         {
             decodedValue += get_value(genotype[i + k_len]) * (unsigned long long)pow((float)4, (float)K - k_len - 1);
 
             // Setting K-mer quality as minimum value of single reading
-            if (quality > (int)buf[i + k_len])
+            int currentQuality = (int)buf[i + k_len];
+            if (quality > currentQuality)
             {
-                quality = (int)buf[i + k_len];
+                quality = currentQuality;
             }
+
+            qualitySum += currentQuality;
         }
 
         // Using only K-Mers with good quality
-        if (quality > MIN_K_MER_QUALITY)
+        /*if (quality > MIN_K_MER_QUALITY)
+        {
+            int index = atomicAdd(goodQualityElementsGpu, 1);
+            id_of_good_kmers_GPU[index] = decodedValue;
+        }*/
+
+        if ((qualitySum / K) > AVERAGE_K_MER_QUALITY)
         {
             int index = atomicAdd(goodQualityElementsGpu, 1);
             id_of_good_kmers_GPU[index] = decodedValue;
@@ -137,7 +148,7 @@ int main()
     printf("\nTime of allocating memory: %.7fs", (double)(clock() - tStartOfAllocationMemory) / CLOCKS_PER_SEC);
     clock_t tStartOfReading = clock();
 
-    if (f.open("G:/chr1.fastq", std::ios::binary | std::ios::in))
+    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
@@ -196,6 +207,7 @@ int main()
     cudaMalloc((void**)&hashTableLengthv2, sizeof(unsigned long long) * elementsWithEnoughQuality);
     unsigned long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, hashTableLengthv2);
     int hashTableLength = new_end_for_unique - hashTableLengthv2;
+    printf("\nUnique K-Mers: %d", hashTableLength);
     cudaFree(hashTableLengthv2);
 
     // Getting amount of different K-mers
