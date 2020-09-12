@@ -108,6 +108,10 @@ int main()
 {
     cudaSetDevice(0);
 
+    // Timers
+    clock_t tStartOfAll = clock();
+    clock_t tStartOfAllocationMemory = clock();
+
     // All K-mers
     long long allElements = 0;
     
@@ -129,6 +133,9 @@ int main()
     // K-Mers with enough quality
     unsigned long long* id_of_all_kmers_GPU;
     cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(unsigned long long) * MAX_K_MERS_TO_ALLOCATE);
+
+    printf("\nTime of allocating memory: %.7fs", (double)(clock() - tStartOfAllocationMemory) / CLOCKS_PER_SEC);
+    clock_t tStartOfReading = clock();
 
     if (f.open("G:/chr1.fastq", std::ios::binary | std::ios::in))
     {
@@ -154,7 +161,6 @@ int main()
                 cudaDeviceSynchronize();
 
                 allElements += length - K;
-                //printf("K_MER");
             }
         }
     }
@@ -167,19 +173,20 @@ int main()
 
     // File close and error handling
     if (f.is_open()) {
-        printf("File closed\n");
+        printf("\nFile closed");
         f.close();
     }
     else
     {
-        printf("Error during file closing\n");
+        printf("\nError during file closing");
     }
 
     // Readed data summary
     cudaMemcpy(&elementsWithEnoughQuality, goodQualityElementsGpu, sizeof(unsigned long long), cudaMemcpyDeviceToHost);
-    printf("\n All K-MERS: %llu", allElements);
-    printf("\n K-MERS with enough quality: %llu", elementsWithEnoughQuality);
-    printf("ok1\n");
+    printf("\nTime of reading: %.7fs", (double)(clock() - tStartOfReading) / CLOCKS_PER_SEC);
+    printf("\nAll K-MERS: %llu", allElements);
+    printf("\nK-MERS with enough quality: %llu", elementsWithEnoughQuality);
+    clock_t tStartOfComputation = clock();
     
     //Sorting K-mers
     thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality);
@@ -231,20 +238,15 @@ int main()
     for (int i = 1; i < hashTableLength; i++)
         b[i] = b[i - 1] + a[i - 1];
 
-    //first kmer : h_data[i] >> 2, last kmer: h_data[i] % to_mod
-    //C = edges array on GPU
-    //h = edges array on CPU
-    //b = array of starting positions
-    //for (int i = 0; i < hashTableLength; i++)
-    //    print_in_4(h[i], K);
-
-    printf("ok3\n");
     free(a);
     free(b);
     free(h);
     cudaFree(id_of_kmer_GPU);
     cudaFree(amount_of_kmer_GPU);
     cudaFree(goodQualityElementsGpu);
+
+    printf("\nTime of computation: %.7fs", (double)(clock() - tStartOfComputation) / CLOCKS_PER_SEC);
+    printf("\nAllTime: %.7fs", (double)(clock() - tStartOfAll) / CLOCKS_PER_SEC);
 
     return 0;
 }
