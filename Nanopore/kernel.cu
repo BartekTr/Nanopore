@@ -35,236 +35,236 @@
 // Changing DNA code to numbers
 __device__ __host__ unsigned long long get_value(char c)
 {
-    unsigned long long value;
-    if (c == 'A')
-        value = 0;
-    else if (c == 'C')
-        value = 1;
-    else if (c == 'T')
-        value = 2;
-    else if (c == 'G')
-        value = 3;
-    else
-        value = 0;
+	unsigned long long value;
+	if (c == 'A')
+		value = 0;
+	else if (c == 'C')
+		value = 1;
+	else if (c == 'T')
+		value = 2;
+	else if (c == 'G')
+		value = 3;
+	else
+		value = 0;
 
-    return value;
+	return value;
 }
 
 // Decoding K-mers from numbers to special code
 __global__ void SetKMerValues(char* genotype, char* buf, int length, unsigned long long* id_of_good_kmers_GPU, unsigned long long* goodQualityElementsGpu)
 {
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < length; i += blockDim.x * gridDim.x)
-    {
-        unsigned long long decodedValue = 0;
-        int quality = 32767;
-        int qualitySum = 0;
-        for (int k_len = 0; k_len < K; k_len++)
-        {
-            decodedValue += get_value(genotype[i + k_len]) * (unsigned long long)pow((float)4, (float)K - k_len - 1);
+	for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < length; i += blockDim.x * gridDim.x)
+	{
+		unsigned long long decodedValue = 0;
+		int quality = 32767;
+		int qualitySum = 0;
+		for (int k_len = 0; k_len < K; k_len++)
+		{
+			decodedValue += get_value(genotype[i + k_len]) * (unsigned long long)pow((float)4, (float)K - k_len - 1);
 
-            // Setting K-mer quality as minimum value of single reading
-            int currentQuality = (int)buf[i + k_len];
-            if (quality > currentQuality)
-            {
-                quality = currentQuality;
-            }
+			// Setting K-mer quality as minimum value of single reading
+			int currentQuality = (int)buf[i + k_len];
+			if (quality > currentQuality)
+			{
+				quality = currentQuality;
+			}
 
-            qualitySum += currentQuality;
-        }
+			qualitySum += currentQuality;
+		}
 
-        // Using only K-Mers with good quality
-        /*if (quality > MIN_K_MER_QUALITY)
-        {
-            int index = atomicAdd(goodQualityElementsGpu, 1);
-            id_of_good_kmers_GPU[index] = decodedValue;
-        }*/
+		// Using only K-Mers with good quality
+		/*if (quality > MIN_K_MER_QUALITY)
+		{
+			int index = atomicAdd(goodQualityElementsGpu, 1);
+			id_of_good_kmers_GPU[index] = decodedValue;
+		}*/
 
-        if ((qualitySum / K) > AVERAGE_K_MER_QUALITY)
-        {
-            int index = atomicAdd(goodQualityElementsGpu, 1);
-            id_of_good_kmers_GPU[index] = decodedValue;
-        }
-    }
+		if ((qualitySum / K) > AVERAGE_K_MER_QUALITY)
+		{
+			int index = atomicAdd(goodQualityElementsGpu, 1);
+			id_of_good_kmers_GPU[index] = decodedValue;
+		}
+	}
 }
 
 // Reading encoded K-mer
 void print_in_4(unsigned long long value, int k)
 {
-    for (int i = k-1; i >= 0; --i)
-        printf("%lld", (value >> (2 * i)) % 4);
-    printf("\n");
+	for (int i = k - 1; i >= 0; --i)
+		printf("%lld", (value >> (2 * i)) % 4);
+	printf("\n");
 }
 
 struct last_mer
 {
-    const unsigned long long a;
+	const unsigned long long a;
 
-    last_mer(unsigned long long _a) : a(_a) {}
+	last_mer(unsigned long long _a) : a(_a) {}
 
-    __host__ __device__
-        unsigned long long operator()(const unsigned long long &x) const {
-        return x % a;
-    }
+	__host__ __device__
+		unsigned long long operator()(const unsigned long long& x) const {
+		return x % a;
+	}
 };
 
 struct first_mer
 {
-    __host__ __device__
-        unsigned long long operator()(const unsigned long long& x) const {
-        return x >> 2;
-    }
+	__host__ __device__
+		unsigned long long operator()(const unsigned long long& x) const {
+		return x >> 2;
+	}
 };
 
 int main()
 {
-    cudaSetDevice(0);
+	cudaSetDevice(0);
 
-    // Temporary data path to file
-    char fileName[100];
-    printf("Enter path to a fastq file:");
-    scanf("%s", fileName);
-    printf("Computation starts...");
+	// Temporary data path to file
+	char fileName[100];
+	printf("Enter path to a fastq file:");
+	scanf("%s", fileName);
+	printf("Computation starts...");
 
-    // Timers
-    clock_t tStartOfAll = clock();
-    clock_t tStartOfAllocationMemory = clock();
+	// Timers
+	clock_t tStartOfAll = clock();
+	clock_t tStartOfAllocationMemory = clock();
 
-    // All K-mers
-    long long allElements = 0;
-    
-    // Temporary data for reading file
-    std::filebuf f;
-    int length = 0;
-    char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);
-    char* genotype = (char*)malloc(sizeof(char) * MAX_SIZE);
-    char* bufGPU, * genotypeGPU;
-    cudaMalloc((void**)&bufGPU, sizeof(char) * MAX_SIZE);
-    cudaMalloc((void**)&genotypeGPU, sizeof(char) * MAX_SIZE);
+	// All K-mers
+	long long allElements = 0;
 
-    // Data for processing file
-    unsigned long long elementsWithEnoughQuality = 0;
-    unsigned long long* goodQualityElementsGpu;
-    cudaMalloc((void**)&goodQualityElementsGpu, sizeof(unsigned long long));
-    cudaMemcpy(goodQualityElementsGpu, &elementsWithEnoughQuality, sizeof(unsigned long long), cudaMemcpyHostToDevice);
+	// Temporary data for reading file
+	std::filebuf f;
+	int length = 0;
+	char* buf = (char*)malloc(sizeof(char) * MAX_SIZE);
+	char* genotype = (char*)malloc(sizeof(char) * MAX_SIZE);
+	char* bufGPU, * genotypeGPU;
+	cudaMalloc((void**)&bufGPU, sizeof(char) * MAX_SIZE);
+	cudaMalloc((void**)&genotypeGPU, sizeof(char) * MAX_SIZE);
 
-    // K-Mers with enough quality
-    unsigned long long* id_of_all_kmers_GPU;
-    cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(unsigned long long) * MAX_K_MERS_TO_ALLOCATE);
+	// Data for processing file
+	unsigned long long elementsWithEnoughQuality = 0;
+	unsigned long long* goodQualityElementsGpu;
+	cudaMalloc((void**)&goodQualityElementsGpu, sizeof(unsigned long long));
+	cudaMemcpy(goodQualityElementsGpu, &elementsWithEnoughQuality, sizeof(unsigned long long), cudaMemcpyHostToDevice);
 
-    printf("\nTime of allocating memory: %.7fs", (double)(clock() - tStartOfAllocationMemory) / CLOCKS_PER_SEC);
-    clock_t tStartOfReading = clock();
+	// K-Mers with enough quality
+	unsigned long long* id_of_all_kmers_GPU;
+	cudaMalloc((void**)&id_of_all_kmers_GPU, sizeof(unsigned long long) * MAX_K_MERS_TO_ALLOCATE);
 
-    if (f.open(fileName, std::ios::binary | std::ios::in))
-    {
-        std::istream is(&f);
-        int i = 0;
-        while (is.getline(buf, MAX_SIZE))
-        {
-            i++;
-            if (i % 4 == 2) // Set A, C, T, G as BYTE
-            {
-                length = strlen(buf);
-                memcpy(genotype, buf, length);
-            }
+	printf("\nTime of allocating memory: %.7fs", (double)(clock() - tStartOfAllocationMemory) / CLOCKS_PER_SEC);
+	clock_t tStartOfReading = clock();
 
-            if (i % 4 == 0) // Set probability
-            {
-                // Copying currently readed data to Device
-                cudaMemcpy(bufGPU, buf, sizeof(char) * length, cudaMemcpyHostToDevice);
-                cudaMemcpy(genotypeGPU, genotype, sizeof(char) * length, cudaMemcpyHostToDevice);
+	if (f.open(fileName, std::ios::binary | std::ios::in))
+	{
+		std::istream is(&f);
+		int i = 0;
+		while (is.getline(buf, MAX_SIZE))
+		{
+			i++;
+			if (i % 4 == 2) // Set A, C, T, G as BYTE
+			{
+				length = strlen(buf);
+				memcpy(genotype, buf, length);
+			}
 
-                // Processing readed data into K-mers with own way
-                SetKMerValues << <(length - K)/256 + 1, 256 >> > (genotypeGPU, bufGPU, length - K, id_of_all_kmers_GPU, goodQualityElementsGpu);
-                cudaDeviceSynchronize();
+			if (i % 4 == 0) // Set probability
+			{
+				// Copying currently readed data to Device
+				cudaMemcpy(bufGPU, buf, sizeof(char) * length, cudaMemcpyHostToDevice);
+				cudaMemcpy(genotypeGPU, genotype, sizeof(char) * length, cudaMemcpyHostToDevice);
 
-                allElements += length - K;
-            }
-        }
-    }
+				// Processing readed data into K-mers with own way
+				SetKMerValues << <(length - K) / 256 + 1, 256 >> > (genotypeGPU, bufGPU, length - K, id_of_all_kmers_GPU, goodQualityElementsGpu);
+				cudaDeviceSynchronize();
 
-    // Delete data for reading file
-    free(buf);
-    free(genotype);
-    cudaFree(bufGPU);
-    cudaFree(genotypeGPU);
+				allElements += length - K;
+			}
+		}
+	}
 
-    // File close and error handling
-    if (f.is_open()) {
-        printf("\nFile closed");
-        f.close();
-    }
-    else
-    {
-        printf("\nError during file closing");
-    }
+	// Delete data for reading file
+	free(buf);
+	free(genotype);
+	cudaFree(bufGPU);
+	cudaFree(genotypeGPU);
 
-    // Readed data summary
-    cudaMemcpy(&elementsWithEnoughQuality, goodQualityElementsGpu, sizeof(unsigned long long), cudaMemcpyDeviceToHost);
-    printf("\nTime of reading: %.7fs", (double)(clock() - tStartOfReading) / CLOCKS_PER_SEC);
-    printf("\nAll K-MERS: %llu", allElements);
-    printf("\nK-MERS with enough quality: %llu", elementsWithEnoughQuality);
-    clock_t tStartOfComputation = clock();
-    
-    //Sorting K-mers
-    thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality);
-    
-    // hashTableLengthv2 - amount of different K-mers
-    unsigned long long* hashTableLengthv2;
-    cudaMalloc((void**)&hashTableLengthv2, sizeof(unsigned long long) * elementsWithEnoughQuality);
-    unsigned long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, hashTableLengthv2);
-    int hashTableLength = new_end_for_unique - hashTableLengthv2;
-    printf("\nUnique K-Mers: %d", hashTableLength);
-    cudaFree(hashTableLengthv2);
+	// File close and error handling
+	if (f.is_open()) {
+		printf("\nFile closed");
+		f.close();
+	}
+	else
+	{
+		printf("\nError during file closing");
+	}
 
-    // Getting amount of different K-mers
-    unsigned long long* id_of_kmer_GPU;
-    int* amount_of_kmer_GPU;
-    cudaMalloc((void**)&id_of_kmer_GPU, sizeof(unsigned long long) * hashTableLength);
-    cudaMalloc((void**)&amount_of_kmer_GPU, sizeof(int) * hashTableLength);
-    thrust::pair<unsigned long long*, int*> new_end;
-    new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
-    cudaFree(id_of_all_kmers_GPU);
+	// Readed data summary
+	cudaMemcpy(&elementsWithEnoughQuality, goodQualityElementsGpu, sizeof(unsigned long long), cudaMemcpyDeviceToHost);
+	printf("\nTime of reading: %.7fs", (double)(clock() - tStartOfReading) / CLOCKS_PER_SEC);
+	printf("\nAll K-MERS: %llu", allElements);
+	printf("\nK-MERS with enough quality: %llu", elementsWithEnoughQuality);
+	clock_t tStartOfComputation = clock();
 
-    unsigned long long to_mod = pow(4, K - 1);
-    //C array,  weights = amount_of_kmer
-    unsigned long long* C;
-    cudaMalloc((void**)&C, sizeof(unsigned long long) * hashTableLength);
-    thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, C, last_mer(to_mod));
-    unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
-    cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
-    cudaFree(C);
+	//Sorting K-mers
+	thrust::sort(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality);
 
-    //to do R array, transform id_of_kmer_GPU, reduce_by_key and transform again:
-    unsigned long long* temp;
-    cudaMalloc((void**)&temp, sizeof(unsigned long long) * hashTableLength);
-    thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, temp, first_mer());
+	// hashTableLengthv2 - amount of different K-mers
+	unsigned long long* hashTableLengthv2;
+	cudaMalloc((void**)&hashTableLengthv2, sizeof(unsigned long long) * elementsWithEnoughQuality);
+	unsigned long long* new_end_for_unique = thrust::unique_copy(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, hashTableLengthv2);
+	int hashTableLength = new_end_for_unique - hashTableLengthv2;
+	printf("\nUnique K-Mers: %d", hashTableLength);
+	cudaFree(hashTableLengthv2);
 
-    unsigned long long* first;
-    int* second;
-    cudaMalloc((void**)&first, sizeof(unsigned long long) * hashTableLength);
-    cudaMalloc((void**)&second, sizeof(int) * hashTableLength);
-    thrust::pair<unsigned long long*, int*> end;
-    end = thrust::reduce_by_key(thrust::device, temp, temp + hashTableLength, thrust::make_constant_iterator(1), first, second);
-    cudaFree(temp);
-    cudaFree(first);
+	// Getting amount of different K-mers
+	unsigned long long* id_of_kmer_GPU;
+	int* amount_of_kmer_GPU;
+	cudaMalloc((void**)&id_of_kmer_GPU, sizeof(unsigned long long) * hashTableLength);
+	cudaMalloc((void**)&amount_of_kmer_GPU, sizeof(int) * hashTableLength);
+	thrust::pair<unsigned long long*, int*> new_end;
+	new_end = thrust::reduce_by_key(thrust::device, id_of_all_kmers_GPU, id_of_all_kmers_GPU + elementsWithEnoughQuality, thrust::make_constant_iterator(1), id_of_kmer_GPU, amount_of_kmer_GPU);
+	cudaFree(id_of_all_kmers_GPU);
 
-    unsigned long long* a = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
-    unsigned long long* b = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
-    cudaMemcpy(a, second, sizeof(unsigned long long)* hashTableLength, cudaMemcpyDeviceToHost);
-    cudaFree(second);
-    b[0] = 0;
-    for (int i = 1; i < hashTableLength; i++)
-        b[i] = b[i - 1] + a[i - 1];
+	unsigned long long to_mod = pow(4, K - 1);
+	//C array,  weights = amount_of_kmer
+	unsigned long long* C;
+	cudaMalloc((void**)&C, sizeof(unsigned long long) * hashTableLength);
+	thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, C, last_mer(to_mod));
+	unsigned long long* h = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+	cudaMemcpy(h, C, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
+	cudaFree(C);
 
-    free(a);
-    free(b);
-    free(h);
-    cudaFree(id_of_kmer_GPU);
-    cudaFree(amount_of_kmer_GPU);
-    cudaFree(goodQualityElementsGpu);
+	//to do R array, transform id_of_kmer_GPU, reduce_by_key and transform again:
+	unsigned long long* temp;
+	cudaMalloc((void**)&temp, sizeof(unsigned long long) * hashTableLength);
+	thrust::transform(thrust::device, id_of_kmer_GPU, id_of_kmer_GPU + hashTableLength, temp, first_mer());
 
-    printf("\nTime of computation: %.7fs", (double)(clock() - tStartOfComputation) / CLOCKS_PER_SEC);
-    printf("\nAllTime: %.7fs", (double)(clock() - tStartOfAll) / CLOCKS_PER_SEC);
+	unsigned long long* first;
+	int* second;
+	cudaMalloc((void**)&first, sizeof(unsigned long long) * hashTableLength);
+	cudaMalloc((void**)&second, sizeof(int) * hashTableLength);
+	thrust::pair<unsigned long long*, int*> end;
+	end = thrust::reduce_by_key(thrust::device, temp, temp + hashTableLength, thrust::make_constant_iterator(1), first, second);
+	cudaFree(temp);
+	cudaFree(first);
 
-    return 0;
+	unsigned long long* a = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+	unsigned long long* b = (unsigned long long*)malloc(sizeof(unsigned long long) * hashTableLength);
+	cudaMemcpy(a, second, sizeof(unsigned long long) * hashTableLength, cudaMemcpyDeviceToHost);
+	cudaFree(second);
+	b[0] = 0;
+	for (int i = 1; i < hashTableLength; i++)
+		b[i] = b[i - 1] + a[i - 1];
+
+	free(a);
+	free(b);
+	free(h);
+	cudaFree(id_of_kmer_GPU);
+	cudaFree(amount_of_kmer_GPU);
+	cudaFree(goodQualityElementsGpu);
+
+	printf("\nTime of computation: %.7fs", (double)(clock() - tStartOfComputation) / CLOCKS_PER_SEC);
+	printf("\nAllTime: %.7fs", (double)(clock() - tStartOfAll) / CLOCKS_PER_SEC);
+
+	return 0;
 }
