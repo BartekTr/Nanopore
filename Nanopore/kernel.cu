@@ -119,6 +119,13 @@ int main()
 {
     cudaSetDevice(0);
 
+    // Temporary data path to file
+
+    char fileName[100];
+    printf("Enter path to a fastq file:");
+    scanf("%s", fileName);
+    printf("Computation starts...");
+
     // Timers
     clock_t tStartOfAll = clock();
     clock_t tStartOfAllocationMemory = clock();
@@ -148,7 +155,7 @@ int main()
     printf("\nTime of allocating memory: %.7fs", (double)(clock() - tStartOfAllocationMemory) / CLOCKS_PER_SEC);
     clock_t tStartOfReading = clock();
 
-    if (f.open("G:/chr100mb.fastq", std::ios::binary | std::ios::in))
+    if (f.open(fileName, std::ios::binary | std::ios::in))
     {
         std::istream is(&f);
         int i = 0;
