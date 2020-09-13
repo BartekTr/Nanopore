@@ -120,7 +120,6 @@ int main()
     cudaSetDevice(0);
 
     // Temporary data path to file
-
     char fileName[100];
     printf("Enter path to a fastq file:");
     scanf("%s", fileName);
